@@ -1,72 +1,81 @@
--- انتظر التحميل
+-- 1. إعدادات أساسية
 if not game:IsLoaded() then game.Loaded:Wait() end
 local player = game.Players.LocalPlayer
+local lastPoint = 1 -- متغير يحفظ آخر نقطة وصل لها اللاعب
 
--- 1. إعداد الواجهة (تبقى ثابتة حتى لو مات اللاعب)
-local screenGui = player.PlayerGui:FindFirstChild("AzozHub_Auto") or Instance.new("ScreenGui", player.PlayerGui)
-screenGui.Name = "AzozHub_Auto"
+-- 2. الواجهة الثابتة
+local screenGui = player.PlayerGui:FindFirstChild("AzozHub_Cont") or Instance.new("ScreenGui", player.PlayerGui)
+screenGui.Name = "AzozHub_Cont"
 screenGui.ResetOnSpawn = false
 
-local frame = screenGui:FindFirstChild("Frame") or Instance.new("Frame", screenGui)
+local frame = screenGui:FindFirstChild("MainFrame") or Instance.new("Frame", screenGui)
+frame.Name = "MainFrame"
 frame.Size = UDim2.new(0, 220, 0, 80)
 frame.Position = UDim2.new(0.5, -110, 0.1, 0)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 
-local status = frame:FindFirstChild("Status") or Instance.new("TextLabel", frame)
-status.Name = "Status"
+local status = frame:FindFirstChild("StatusLabel") or Instance.new("TextLabel", frame)
+status.Name = "StatusLabel"
 status.Size = UDim2.new(1, 0, 1, 0)
-status.TextColor3 = Color3.new(1, 1, 1)
+status.TextColor3 = Color3.fromRGB(255, 255, 0) -- لون أصفر للتنبيه
 status.BackgroundTransparency = 1
-status.TextSize = 16
+status.TextSize = 15
+status.Text = "جاري التجهيز..."
 
--- 2. وظيفة التجميع (الفرم)
-local function startFarming(character)
-    local root = character:WaitForChild("HumanoidRootPart", 10)
-    if not root then return end
-    
-    local locations = {
-        CFrame.new(423.992432, -8.54999161, -340, 1, 0, 0, 0, 1, 0, 0, 0, 1),
-        CFrame.new(4985, 4.74950027, 532.574951, 1, 0, 0, 0, 1, 0, 0, 0, 1),
-        CFrame.new(2246.75, -16.9999886, -245.317535, 1, 0, 0, 0, 1, 0, 0, 0, 1)
-    }
-
-    status.Text = "بدء الفرم التلقائي..."
-    task.wait(2) -- وقت راحة بعد الرسبن
-
-    for i, target in ipairs(locations) do
-        if character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0 then
-            status.Text = "نقطة " .. i .. " | جاري الانتقال"
-            root.CFrame = target
-            task.wait(1.5) -- وقت لضمان تسجيل النقطة
-        else
-            return -- إذا مات خلال اللوب، يوقف هذي المحاولة وينتظر الرسبن الجديد
-        end
-    end
-
-    -- سيرفر هوب بعد النجاح
-    status.Text = "تم! جاري تبديل السيرفر..."
-    task.wait(3)
-    
+-- 3. وظيفة السيرفر هوب (نفس النسخة القوية)
+local function safeServerHop()
+    status.Text = "تجميع اكتمل! تغيير السيرفر..."
     local ts = game:GetService("TeleportService")
     local http = game:GetService("HttpService")
+    task.wait(5)
+    
     local success, servers = pcall(function()
         return http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
     end)
     
-    if success then
+    if success and servers.data then
         for _, server in pairs(servers.data) do
             if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                ts:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-                break
+                pcall(function() ts:TeleportToPlaceInstance(game.PlaceId, server.id, player) end)
             end
         end
     end
+    pcall(function() ts:Teleport(game.PlaceId, player) end)
 end
 
--- 3. الربط بحدث "العودة للحياة" (Respawn)
-player.CharacterAdded:Connect(startFarming)
+-- 4. وظيفة الفرم الذكية (تكمل من حيث توقفت)
+local function startFarming()
+    local locations = {
+        CFrame.new(423.992432, -8.54999161, -340),
+        CFrame.new(4985, 4.74950027, 532.574951),
+        CFrame.new(2246.75, -16.9999886, -245.317535)
+    }
 
--- تشغيل أول مرة إذا كانت الشخصية موجودة أصلاً
-if player.Character then
-    task.spawn(startFarming, player.Character)
+    -- يكمل من آخر نقطة خزنها المتغير lastPoint
+    for i = lastPoint, #locations do
+        local char = player.Character or player.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart", 10)
+        local hum = char:WaitForChild("Humanoid")
+
+        if root and hum.Health > 0 then
+            status.Text = "تكملة الفرم: نقطة " .. i
+            root.CFrame = locations[i]
+            lastPoint = i -- تحديث آخر نقطة وصل لها بنجاح
+            task.wait(2)
+        else
+            -- إذا مات اللاعب، ينتظر الرسبن الجديد ويرجع ينادي الوظيفة
+            status.Text = "مت؟ بانتظار العودة للفرم..."
+            player.CharacterAdded:Wait()
+            task.wait(1)
+            startFarming() -- يعيد تشغيل الوظيفة وهي بتعرف تكمل من lastPoint
+            return
+        end
+    end
+
+    -- إذا خلص كل النقاط
+    lastPoint = 1 -- تصفير العداد للسيرفر الجديد
+    safeServerHop()
 end
+
+-- تشغيل السكربت فوراً
+task.spawn(startFarming)
