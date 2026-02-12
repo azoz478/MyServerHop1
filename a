@@ -1,52 +1,54 @@
--- 1. التأكد من أن الماب واللاعب محملين تماماً قبل أي شيء
+-- انتظر التحميل
 if not game:IsLoaded() then game.Loaded:Wait() end
 local player = game.Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local root = char:WaitForChild("HumanoidRootPart")
 
--- 2. إعداد الواجهة (Azoz Hub) - ResetOnSpawn عشان ما تروح
-local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+-- 1. إعداد الواجهة (تبقى ثابتة حتى لو مات اللاعب)
+local screenGui = player.PlayerGui:FindFirstChild("AzozHub_Auto") or Instance.new("ScreenGui", player.PlayerGui)
 screenGui.Name = "AzozHub_Auto"
 screenGui.ResetOnSpawn = false
 
-local frame = Instance.new("Frame", screenGui)
+local frame = screenGui:FindFirstChild("Frame") or Instance.new("Frame", screenGui)
 frame.Size = UDim2.new(0, 220, 0, 80)
 frame.Position = UDim2.new(0.5, -110, 0.1, 0)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-frame.Draggable = true
-frame.Active = true
 
-local status = Instance.new("TextLabel", frame)
+local status = frame:FindFirstChild("Status") or Instance.new("TextLabel", frame)
+status.Name = "Status"
 status.Size = UDim2.new(1, 0, 1, 0)
-status.Text = "Azoz Hub: جاري الفرم..."
 status.TextColor3 = Color3.new(1, 1, 1)
 status.BackgroundTransparency = 1
-status.TextSize = 18
+status.TextSize = 16
 
--- 3. وظيفة التجميع الذاتي (تشتغل فوراً)
-local function startInstantFarm()
-    -- قائمة الإحداثيات
+-- 2. وظيفة التجميع (الفرم)
+local function startFarming(character)
+    local root = character:WaitForChild("HumanoidRootPart", 10)
+    if not root then return end
+    
     local locations = {
         CFrame.new(423.992432, -8.54999161, -340, 1, 0, 0, 0, 1, 0, 0, 0, 1),
         CFrame.new(4985, 4.74950027, 532.574951, 1, 0, 0, 0, 1, 0, 0, 0, 1),
         CFrame.new(2246.75, -16.9999886, -245.317535, 1, 0, 0, 0, 1, 0, 0, 0, 1)
     }
 
-    -- تنفيذ الانتقال
+    status.Text = "بدء الفرم التلقائي..."
+    task.wait(2) -- وقت راحة بعد الرسبن
+
     for i, target in ipairs(locations) do
-        if root then
+        if character:FindFirstChild("Humanoid") and character.Humanoid.Health > 0 then
+            status.Text = "نقطة " .. i .. " | جاري الانتقال"
             root.CFrame = target
-            task.wait(0.5) -- تأخير بسيط عشان اللعبة تلحق تسجل
+            task.wait(1.5) -- وقت لضمان تسجيل النقطة
+        else
+            return -- إذا مات خلال اللوب، يوقف هذي المحاولة وينتظر الرسبن الجديد
         end
     end
 
-    -- 4. السيرفر هوب التلقائي بعد النقاط الثلاث
+    -- سيرفر هوب بعد النجاح
     status.Text = "تم! جاري تبديل السيرفر..."
-    task.wait(3) -- انتظار أمان قبل الخروج
+    task.wait(3)
     
     local ts = game:GetService("TeleportService")
     local http = game:GetService("HttpService")
-    
     local success, servers = pcall(function()
         return http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
     end)
@@ -61,5 +63,10 @@ local function startInstantFarm()
     end
 end
 
--- تشغيل الفانكشن فوراً بمجرد عمل Execute للسكربت
-task.spawn(startInstantFarm)
+-- 3. الربط بحدث "العودة للحياة" (Respawn)
+player.CharacterAdded:Connect(startFarming)
+
+-- تشغيل أول مرة إذا كانت الشخصية موجودة أصلاً
+if player.Character then
+    task.spawn(startFarming, player.Character)
+end
