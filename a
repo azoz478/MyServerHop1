@@ -1,0 +1,80 @@
+-- 1. إعداد الواجهة مع خاصية الثبات عند الموت
+local player = game.Players.LocalPlayer
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AzozHubGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false -- هذا السطر يخلي القائمة ما تختفي إذا مت
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size = UDim2.new(0, 250, 0, 150)
+frame.Position = UDim2.new(0.5, -125, 0.4, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.Draggable = true
+frame.Active = true
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Text = "Azoz Hub"
+title.TextColor3 = Color3.fromRGB(0, 255, 255)
+title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+title.TextSize = 20
+
+local farmBtn = Instance.new("TextButton", frame)
+farmBtn.Size = UDim2.new(0.8, 0, 0, 50)
+farmBtn.Position = UDim2.new(0.1, 0, 0.45, 0)
+farmBtn.Text = "بدء التجميع 🚀"
+farmBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+farmBtn.TextColor3 = Color3.new(1, 1, 1)
+
+-- 2. وظيفة السيرفر هوب مع إعادة المحاولة الذكية
+local function serverHop()
+    local ts = game:GetService("TeleportService")
+    local http = game:GetService("HttpService")
+    
+    farmBtn.Text = "بحث عن سيرفر..."
+    
+    while true do -- حلقة تكرار لين يلقى سيرفر ويدخلك
+        local success, servers = pcall(function()
+            return http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+        end)
+        
+        if success then
+            for _, server in pairs(servers.data) do
+                if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                    farmBtn.Text = "جاري الانتقال..."
+                    local teleportSuccess, err = pcall(function()
+                        ts:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                    end)
+                    if teleportSuccess then return end -- لو نجح يطلع من اللوب
+                end
+            end
+        end
+        farmBtn.Text = "فشل! إعادة محاولة..."
+        task.wait(2) -- ينتظر ثانيتين قبل ما يدور سيرفر ثاني
+    end
+end
+
+-- 3. تشغيل الأوتو فارم
+farmBtn.MouseButton1Click:Connect(function()
+    farmBtn.Text = "جاري التجميع..."
+    farmBtn.BackgroundColor3 = Color3.fromRGB(170, 170, 0)
+    
+    local char = player.Character or player.CharacterAdded:Wait()
+    local root = char:WaitForChild("HumanoidRootPart")
+    
+    local locations = {
+        CFrame.new(423.992432, -8.54999161, -340, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+        CFrame.new(4985, 4.74950027, 532.574951, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+        CFrame.new(2246.75, -16.9999886, -245.317535, 1, 0, 0, 0, 1, 0, 0, 0, 1)
+    }
+
+    for i, target in ipairs(locations) do
+        root.CFrame = target
+        task.wait(0.2)
+    end
+
+    farmBtn.Text = "تم! انتظر ثواني..."
+    task.wait(5) -- زدنا الوقت لـ 5 ثواني عشان الأمان
+    
+    serverHop() -- استدعاء وظيفة الانتقال الذكية
+end)
