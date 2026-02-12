@@ -1,82 +1,65 @@
--- 1. إعداد الواجهة الثابتة
+-- 1. التأكد من أن الماب واللاعب محملين تماماً قبل أي شيء
+if not game:IsLoaded() then game.Loaded:Wait() end
 local player = game.Players.LocalPlayer
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AzozHubAuto"
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn = false -- القائمة ما تختفي عند الموت
+local char = player.Character or player.CharacterAdded:Wait()
+local root = char:WaitForChild("HumanoidRootPart")
+
+-- 2. إعداد الواجهة (Azoz Hub) - ResetOnSpawn عشان ما تروح
+local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+screenGui.Name = "AzozHub_Auto"
+screenGui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 250, 0, 100)
-frame.Position = UDim2.new(0.5, -125, 0.1, 0) -- مكانها فوق بالمنتصف
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.Size = UDim2.new(0, 220, 0, 80)
+frame.Position = UDim2.new(0.5, -110, 0.1, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.Draggable = true
 frame.Active = true
 
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 40)
-title.Text = "Azoz Hub - Auto Mode"
-title.TextColor3 = Color3.fromRGB(0, 255, 255)
-title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-title.TextSize = 18
+local status = Instance.new("TextLabel", frame)
+status.Size = UDim2.new(1, 0, 1, 0)
+status.Text = "Azoz Hub: جاري الفرم..."
+status.TextColor3 = Color3.new(1, 1, 1)
+status.BackgroundTransparency = 1
+status.TextSize = 18
 
-local statusLabel = Instance.new("TextLabel", frame)
-statusLabel.Size = UDim2.new(1, 0, 0, 60)
-statusLabel.Position = UDim2.new(0, 0, 0.4, 0)
-statusLabel.Text = "جاري البدء تلقائياً..."
-statusLabel.TextColor3 = Color3.new(1, 1, 1)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextSize = 16
-
--- 2. وظيفة السيرفر هوب مع إعادة المحاولة
-local function serverHop()
-    local ts = game:GetService("TeleportService")
-    local http = game:GetService("HttpService")
-    statusLabel.Text = "بحث عن سيرفر جديد..."
-    
-    while true do 
-        local success, servers = pcall(function()
-            return http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-        end)
-        
-        if success then
-            for _, server in pairs(servers.data) do
-                if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                    statusLabel.Text = "جاري الانتقال..."
-                    pcall(function()
-                        ts:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-                    end)
-                end
-            end
-        end
-        statusLabel.Text = "فشل! إعادة محاولة..."
-        task.wait(2)
-    end
-end
-
--- 3. تنفيذ الفرم التلقائي (يبدأ فوراً عند التشغيل)
-local function startFarming()
-    task.wait(1) -- تأخير بسيط عشان الماب يحمل
-    statusLabel.Text = "جاري التجميع السريع..."
-    
-    local char = player.Character or player.CharacterAdded:Wait()
-    local root = char:WaitForChild("HumanoidRootPart")
-    
+-- 3. وظيفة التجميع الذاتي (تشتغل فوراً)
+local function startInstantFarm()
+    -- قائمة الإحداثيات
     local locations = {
         CFrame.new(423.992432, -8.54999161, -340, 1, 0, 0, 0, 1, 0, 0, 0, 1),
         CFrame.new(4985, 4.74950027, 532.574951, 1, 0, 0, 0, 1, 0, 0, 0, 1),
         CFrame.new(2246.75, -16.9999886, -245.317535, 1, 0, 0, 0, 1, 0, 0, 0, 1)
     }
 
-    -- انتقال سريع بين النقاط
+    -- تنفيذ الانتقال
     for i, target in ipairs(locations) do
-        root.CFrame = target
-        task.wait(0.3) -- وقت كافي لتسجيل النقطة
+        if root then
+            root.CFrame = target
+            task.wait(0.5) -- تأخير بسيط عشان اللعبة تلحق تسجل
+        end
     end
 
-    statusLabel.Text = "تم! انتظر للسيرفر هوب..."
-    task.wait(5) -- وقت أمان
-    serverHop()
+    -- 4. السيرفر هوب التلقائي بعد النقاط الثلاث
+    status.Text = "تم! جاري تبديل السيرفر..."
+    task.wait(3) -- انتظار أمان قبل الخروج
+    
+    local ts = game:GetService("TeleportService")
+    local http = game:GetService("HttpService")
+    
+    local success, servers = pcall(function()
+        return http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
+    end)
+    
+    if success then
+        for _, server in pairs(servers.data) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                ts:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+                break
+            end
+        end
+    end
 end
 
--- تشغيل الفانكشن تلقائياً
-startFarming()
+-- تشغيل الفانكشن فوراً بمجرد عمل Execute للسكربت
+task.spawn(startInstantFarm)
